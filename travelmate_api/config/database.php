@@ -112,6 +112,12 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'mongodb' => [
+            'driver' => 'mongodb',
+            'dsn' => env('MONGODB_URI', 'mongodb+srv://muhammadizzuddin4600:OmHkoNe0tVTRLOdS@cluster0.ejzsqys.mongodb.net/travelmate_db?retryWrites=true&w=majority'),
+            'database' => 'travelmate_db',
+        ],
+
     ],
 
     /*

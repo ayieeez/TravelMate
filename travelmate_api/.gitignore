@@ -18,9 +18,14 @@
 /public/storage
 /storage/*.key
 /storage/pail
+storage/logs/*
+storage/framework/*
 /vendor
 Homestead.json
 Homestead.yaml
-npm-debug.log
 Thumbs.db
-yarn-error.log
+
+
+
+
+
