@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:travelmate_app/config/env.dart';
 import 'package:travelmate_app/providers/location_provider.dart';
 import 'package:travelmate_app/widgets/weather_card.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -21,6 +23,8 @@ class _WeatherScreenState extends State<WeatherScreen> {
   String _currentLocation = 'Current Location';
   double? _customLat;
   double? _customLon;
+  String _city = '';
+  String _country = '';
 
   Future<void> _fetchWeather(double lat, double lon) async {
     setState(() {
@@ -39,10 +43,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
           _error = '';
           
           // Update location name
-          final city = data['city'] ?? '';
-          final country = data['country'] ?? '';
-          _currentLocation = city.isNotEmpty 
-            ? '$city${country.isNotEmpty ? ", $country" : ""}' 
+          _city = data['city'] ?? '';
+          _country = data['country'] ?? '';
+          _currentLocation = _city.isNotEmpty 
+            ? '$_city${_country.isNotEmpty ? ", $_country" : ""}' 
             : 'Current Location';
         });
       } else {
@@ -72,7 +76,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     try {
       final response = await http.get(
         Uri.parse('https://nominatim.openstreetmap.org/search?format=json&q=$query'),
-        headers: {'User-Agent': 'TravelMate App (com.travelmate.app)'}, // Add User-Agent
+        headers: {'User-Agent': 'TravelMate App (com.travelmate.app)'},
       );
 
       if (response.statusCode == 200) {
@@ -122,6 +126,49 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
   }
 
+  // Open map for the current location
+  Future<void> _openMap() async {
+    double lat;
+    double lon;
+    
+    if (_customLat != null && _customLon != null) {
+      lat = _customLat!;
+      lon = _customLon!;
+    } else {
+      final location = Provider.of<LocationProvider>(context, listen: false).currentPosition;
+      if (location == null) return;
+      lat = location.latitude;
+      lon = location.longitude;
+    }
+    
+    final url = 'https://www.google.com/maps/search/?api=1&query=$lat,$lon';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open map')),
+      );
+    }
+  }
+
+  // Share weather information
+  void _shareWeather() {
+    if (_weatherData == null) return;
+    
+    final temp = _weatherData!['temp']?.toStringAsFixed(1) ?? 'N/A';
+    final description = _weatherData!['description'] ?? 'unknown weather';
+    final humidity = _weatherData!['humidity']?.toString() ?? 'N/A';
+    
+    final message = 
+      'Current weather in $_currentLocation:\n'
+      '🌡️ Temperature: $temp°C\n'
+      '☁️ Conditions: ${description.toString().toUpperCase()}\n'
+      '💧 Humidity: $humidity%\n'
+      '\nShared via TravelMate App';
+    
+    Share.share(message);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -129,7 +176,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
     if (location != null) {
       _fetchWeather(location.latitude, location.longitude);
     } else {
-      // If location is null, try to get it again
       Provider.of<LocationProvider>(context, listen: false).getCurrentLocation().then((_) {
         final newLocation = Provider.of<LocationProvider>(context, listen: false).currentPosition;
         if (newLocation != null) {
@@ -219,12 +265,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       WeatherActionButton(
                         icon: Icons.map,
                         label: 'View Map',
-                        onPressed: () {},
+                        onPressed: _openMap,
                       ),
                       WeatherActionButton(
                         icon: Icons.share,
                         label: 'Share',
-                        onPressed: () {},
+                        onPressed: _shareWeather,
                       ),
                     ],
                   ),
