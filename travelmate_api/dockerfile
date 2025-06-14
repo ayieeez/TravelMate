@@ -1,4 +1,4 @@
-# Use official PHP image
+# Use official PHP image as a base image
 FROM php:8.2-apache
 
 # Set working directory
