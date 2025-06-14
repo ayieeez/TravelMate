@@ -1,9 +1,9 @@
 services:
   - type: web
     name: travelmate-api
-    runtime: php
-    buildCommand: composer install
-    startCommand: php artisan serve --host=0.0.0.0 --port=10000
+    runtime: docker
+    buildCommand: docker build -t travelmate-api .
+    startCommand: docker run -p 10000:80 travelmate-api
     envVars:
       - key: APP_ENV
         value: production
@@ -13,3 +13,5 @@ services:
         value: mongodb+srv://muhammadizzuddin4600:OmHkoNe0tVTRLOdS@cluster0.ejzsqys.mongodb.net/travelmate_db?retryWrites=true&w=majority
       - key: OPENWEATHER_API_KEY
         value: dc282357cf98721b16440ed5964f1376
+      - key: APP_KEY
+        value: base64:yX1H1dSgugsaEipUUJ+jVSqHSQYpVvmCte2cwb+Q1WU=
