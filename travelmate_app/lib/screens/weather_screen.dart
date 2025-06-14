@@ -141,13 +141,39 @@ class _WeatherScreenState extends State<WeatherScreen> {
       lon = location.longitude;
     }
     
-    final url = 'https://www.google.com/maps/search/?api=1&query=$lat,$lon';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open map')),
-      );
+    // Use platform-agnostic map URL
+    final url = Uri.parse('https://www.openstreetmap.org/?mlat=$lat&mlon=$lon#map=15/$lat/$lon');
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication,
+        );
+      } else {
+        // Fallback to Google Maps if OpenStreetMap fails
+        final googleUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
+        if (await canLaunchUrl(googleUrl)) {
+          await launchUrl(
+            googleUrl,
+            mode: LaunchMode.externalApplication,
+          );
+        } else {
+          throw Exception('Could not launch maps');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not open map'),
+            action: SnackBarAction(
+              label: 'RETRY',
+              onPressed: _openMap,
+            ),
+          ),
+        );
+      }
     }
   }
 
