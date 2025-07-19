@@ -197,11 +197,6 @@ exports.getNearbyPlaces = async (req, res) => {
     ]);
   }
 };
-  } catch (error) {
-    console.error('Places API Error:', error.response?.data || error.message);
-    res.status(500).json({ error: "Places fetch failed" });
-  }
-};
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
