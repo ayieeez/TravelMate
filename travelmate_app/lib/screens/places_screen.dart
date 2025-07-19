@@ -93,7 +93,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
         final places = json.decode(response.body);
         print('Received ${places.length} places'); // Debug log
         print('Places data: $places'); // Debug log
-        
+
         setState(() {
           _places = places;
           _error = '';
@@ -102,7 +102,9 @@ class _PlacesScreenState extends State<PlacesScreen> {
         // Store places data to MongoDB
         _storePlacesData(places, lat, lon);
       } else {
-        print('API Error: ${response.statusCode} - ${response.body}'); // Debug log
+        print(
+          'API Error: ${response.statusCode} - ${response.body}',
+        ); // Debug log
         setState(() {
           _error =
               'Failed to load places: ${response.statusCode} - ${response.body}';
@@ -353,15 +355,15 @@ class _PlacesScreenState extends State<PlacesScreen> {
                     onPressed: location != null
                         ? () {
                             print('Force refreshing places...');
-                            _fetchNearbyPlaces(location.latitude, location.longitude);
+                            _fetchNearbyPlaces(
+                              location.latitude,
+                              location.longitude,
+                            );
                           }
                         : null,
                     child: Text(
                       'Refresh',
-                      style: TextStyle(
-                        color: Colors.green[700],
-                        fontSize: 10,
-                      ),
+                      style: TextStyle(color: Colors.green[700], fontSize: 10),
                     ),
                   ),
                 ],
@@ -438,7 +440,10 @@ class _PlacesScreenState extends State<PlacesScreen> {
                                 _selectedCategory = 'all';
                                 _radius = 5000; // Increase radius to 5km
                               });
-                              _fetchNearbyPlaces(location.latitude, location.longitude);
+                              _fetchNearbyPlaces(
+                                location.latitude,
+                                location.longitude,
+                              );
                             }
                           : null,
                       icon: const Icon(Icons.search),
