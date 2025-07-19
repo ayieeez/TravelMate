@@ -40,4 +40,21 @@ class MongoDBService {
       print('MongoDB insert error: $e');
     }
   }
+
+  Future<void> insertPlacesLog(Map<String, dynamic> log) async {
+    try {
+      final url = Uri.parse('${Env.baseUrl}/places-log');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(log),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to store places log: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('MongoDB places insert error: $e');
+    }
+  }
 }
