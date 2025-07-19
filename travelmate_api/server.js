@@ -1,3 +1,5 @@
+// Set working directory to script location
+process.chdir(__dirname);
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
