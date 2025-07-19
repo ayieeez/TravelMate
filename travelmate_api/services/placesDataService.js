@@ -44,23 +44,49 @@ class PlacesDataService {
 
   async checkExistingData(lat, lon, radius, category) {
     try {
+      // Ensure geospatial index exists before querying
+      await this.ensureGeospatialIndex();
+      
       // Look for places within the search area that were collected recently (last 24 hours)
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       
-      const existingPlaces = await Place.find({
-        $and: [
-          {
-            location: {
-              $near: {
-                $geometry: { type: 'Point', coordinates: [lon, lat] },
-                $maxDistance: radius
+      let existingPlaces;
+      try {
+        existingPlaces = await Place.find({
+          $and: [
+            {
+              location: {
+                $near: {
+                  $geometry: { type: 'Point', coordinates: [lon, lat] },
+                  $maxDistance: radius
+                }
               }
-            }
-          },
-          { category: category === 'all' ? { $exists: true } : category },
-          { created_at: { $gte: oneDayAgo } }
-        ]
-      }).limit(50);
+            },
+            { category: category === 'all' ? { $exists: true } : category },
+            { created_at: { $gte: oneDayAgo } }
+          ]
+        }).limit(50);
+      } catch (geoQueryError) {
+        console.log('Geospatial query failed in checkExistingData, using fallback');
+        
+        // Fallback: Get recent places and filter manually
+        existingPlaces = await Place.find({
+          $and: [
+            { category: category === 'all' ? { $exists: true } : category },
+            { created_at: { $gte: oneDayAgo } }
+          ]
+        }).limit(100);
+        
+        // Manual distance filtering
+        existingPlaces = existingPlaces.filter(place => {
+          if (!place.location || !place.location.coordinates) return false;
+          const distance = this.calculateDistance(
+            lat, lon,
+            place.location.coordinates[1], place.location.coordinates[0]
+          );
+          return distance <= radius;
+        }).slice(0, 50);
+      }
 
       return existingPlaces;
     } catch (error) {
@@ -324,6 +350,26 @@ class PlacesDataService {
       await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_INTERVAL - elapsed));
     }
     this.lastRequestTime = Date.now();
+  }
+
+  // Ensure geospatial index exists for MongoDB queries
+  async ensureGeospatialIndex() {
+    try {
+      // Check if the index already exists
+      const indexes = await Place.collection.getIndexes();
+      const hasGeoIndex = Object.keys(indexes).some(indexName => 
+        indexes[indexName].some(field => field[0] === 'location' && field[1] === '2dsphere')
+      );
+
+      if (!hasGeoIndex) {
+        console.log('Creating geospatial index for location field...');
+        await Place.collection.createIndex({ location: '2dsphere' });
+        console.log('✅ Geospatial index created successfully');
+      }
+    } catch (error) {
+      console.error('Failed to create geospatial index:', error.message);
+      // Continue without index - will use alternative query approach
+    }
   }
 }
 
