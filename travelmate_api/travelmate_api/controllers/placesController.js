@@ -19,7 +19,7 @@ exports.getNearbyPlaces = async (req, res) => {
     let searchTags = '';
     switch (category) {
       case 'tourism':
-        searchTags = 'tourism=attraction|tourism=museum|tourism=gallery|tourism=viewpoint|historic=monument|tourism=zoo|tourism=theme_park';
+        searchTags = 'tourism=attraction|tourism=museum|tourism=gallery|tourism=viewpoint|historic=monument';
         break;
       case 'restaurant':
         searchTags = 'amenity=restaurant|amenity=cafe|amenity=fast_food|amenity=bar|amenity=pub';
@@ -28,29 +28,26 @@ exports.getNearbyPlaces = async (req, res) => {
         searchTags = 'tourism=hotel|tourism=guest_house|tourism=hostel|tourism=motel';
         break;
       case 'shopping':
-        searchTags = 'shop=mall|shop=supermarket|shop=convenience|shop=department_store|amenity=marketplace';
+        searchTags = 'shop=*|amenity=marketplace|tourism=shopping';
         break;
       case 'entertainment':
-        searchTags = 'amenity=cinema|amenity=theatre|leisure=amusement_arcade|tourism=theme_park|leisure=bowling_alley';
+        searchTags = 'amenity=cinema|amenity=theatre|leisure=amusement_arcade|tourism=theme_park';
         break;
       default:
-        searchTags = 'tourism=attraction|amenity=restaurant|amenity=cafe|shop=mall|leisure=park|tourism=museum|amenity=cinema';
+        searchTags = 'tourism=*|amenity=restaurant|amenity=cafe|shop=*|leisure=*';
     }
 
     // Use Overpass API for better radius-based search with real places
-    const tagQueries = searchTags.split('|').map(tag => `nwr[${tag}](around:${radius},${lat},${lon})`).join(';\n        ');
-    
     const overpassQuery = `
       [out:json][timeout:60];
       (
-        ${tagQueries};
+        nwr[${searchTags.replace(/\|/g, '](around:' + radius + ',' + lat + ',' + lon + ');nwr[')}](around:${radius},${lat},${lon});
         nwr["name"](around:${radius},${lat},${lon});
       );
       out center meta;
     `;
 
     console.log(`Searching for real places with radius: ${radius}m, category: ${category}`);
-    console.log('Overpass query:', overpassQuery);
     
     const overpassResponse = await axios.post(
       'https://overpass-api.de/api/interpreter',
@@ -249,19 +246,13 @@ exports.getNearbyPlaces = async (req, res) => {
       res.json(uniquePlaces.slice(0, 100)); // Return up to 100 real places
     }
   } catch (error) {
-    console.error('Places API Error Details:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      url: error.response?.config?.url
-    });
+    console.error('Places API Error:', error.response?.data || error.message);
     
     // Even on error, try to return empty array instead of fake data
     res.status(500).json({ 
       error: "Failed to fetch real places", 
       message: "Please try increasing the search radius or check your internet connection",
-      places: [],
-      debug: error.message
+      places: []
     });
   }
 };

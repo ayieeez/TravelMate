@@ -7,19 +7,6 @@ const PlaceSchema = new mongoose.Schema({
   type: String,
   lat: Number,
   lon: Number,
-  rating: Number,
-  opening_hours: String,
-  location: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number],
-      index: '2dsphere'
-    }
-  },
   fetchedAt: { type: Date, default: Date.now }
 });
 

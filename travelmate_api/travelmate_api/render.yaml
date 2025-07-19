@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: travelmate-api
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        value: mongodb+srv://muhammadizzuddin4600:OmHkoNe0tVTRLOdS@cluster0.ejzsqys.mongodb.net/travelmate_db?retryWrites=true&w=majority
+      - key: OPENWEATHER_API_KEY
+        value: dc282357cf98721b16440ed5964f1376
