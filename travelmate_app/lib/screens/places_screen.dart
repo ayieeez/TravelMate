@@ -35,7 +35,11 @@ class _PlacesScreenState extends State<PlacesScreen> {
       'label': 'Tourist Attractions',
       'icon': Icons.camera_alt,
     },
-    {'key': 'restaurant', 'label': 'Restaurants & Food', 'icon': Icons.restaurant},
+    {
+      'key': 'restaurant',
+      'label': 'Restaurants & Food',
+      'icon': Icons.restaurant,
+    },
     {'key': 'accommodation', 'label': 'Hotels & Lodging', 'icon': Icons.hotel},
     {'key': 'shopping', 'label': 'Shopping', 'icon': Icons.shopping_bag},
     {'key': 'entertainment', 'label': 'Entertainment', 'icon': Icons.movie},
@@ -238,7 +242,10 @@ class _PlacesScreenState extends State<PlacesScreen> {
               onChangeEnd: (value) {
                 // Real-time update when slider is released
                 if (_userPosition != null) {
-                  _fetchNearbyPlaces(_userPosition!.latitude, _userPosition!.longitude);
+                  _fetchNearbyPlaces(
+                    _userPosition!.latitude,
+                    _userPosition!.longitude,
+                  );
                 }
               },
             ),
