@@ -90,7 +90,7 @@ exports.getNearbyPlaces = async (req, res) => {
             elementLon
           );
 
-          // Determine place type with better logic
+          // Determine place type with consistent, user-friendly categories
           let placeType = 'attraction';
           if (element.tags.amenity) {
             if (['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'food_court', 'ice_cream', 'marketplace'].includes(element.tags.amenity)) {
