@@ -57,4 +57,68 @@ class MongoDBService {
       print('MongoDB places insert error: $e');
     }
   }
+
+  // New method to manually refresh places data
+  Future<bool> refreshPlacesData(
+    double lat,
+    double lon, {
+    int radius = 5000,
+    String category = 'all',
+  }) async {
+    try {
+      final url = Uri.parse('${Env.baseUrl}/places/refresh');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'lat': lat,
+          'lon': lon,
+          'radius': radius,
+          'category': category,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        print('Places data refreshed: ${responseData['message']}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Places refresh error: $e');
+      return false;
+    }
+  }
+
+  // New method to manually collect data for a location (admin use)
+  Future<bool> collectPlacesData(
+    double lat,
+    double lon, {
+    int radius = 5000,
+    String category = 'all',
+  }) async {
+    try {
+      final url = Uri.parse('${Env.baseUrl}/places/collect');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'lat': lat,
+          'lon': lon,
+          'radius': radius,
+          'category': category,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        print('Data collection completed: ${responseData['message']}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Data collection error: $e');
+      return false;
+    }
+  }
 }
