@@ -35,10 +35,12 @@ class _PlacesScreenState extends State<PlacesScreen> {
       'label': 'Tourist Attractions',
       'icon': Icons.camera_alt,
     },
-    {'key': 'restaurant', 'label': 'Restaurants', 'icon': Icons.restaurant},
-    {'key': 'accommodation', 'label': 'Hotels', 'icon': Icons.hotel},
+    {'key': 'restaurant', 'label': 'Restaurants & Food', 'icon': Icons.restaurant},
+    {'key': 'accommodation', 'label': 'Hotels & Lodging', 'icon': Icons.hotel},
     {'key': 'shopping', 'label': 'Shopping', 'icon': Icons.shopping_bag},
     {'key': 'entertainment', 'label': 'Entertainment', 'icon': Icons.movie},
+    {'key': 'healthcare', 'label': 'Healthcare', 'icon': Icons.local_hospital},
+    {'key': 'transport', 'label': 'Transport', 'icon': Icons.directions_bus},
   ];
 
   @override
@@ -91,7 +93,6 @@ class _PlacesScreenState extends State<PlacesScreen> {
         url += '&category=$_selectedCategory';
       }
 
-      print('Fetching places from: $url'); // Debug log
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
@@ -101,19 +102,11 @@ class _PlacesScreenState extends State<PlacesScreen> {
         List<dynamic> places;
         if (responseData is Map && responseData.containsKey('places')) {
           places = responseData['places'] as List<dynamic>;
-          print('Received ${places.length} places from API'); // Debug log
-          print(
-            'API metadata: total=${responseData['total']}, category=${responseData['category']}, radius=${responseData['radius']}',
-          ); // Debug log
         } else if (responseData is List) {
           // Fallback for old format
           places = responseData;
-          print(
-            'Received ${places.length} places (legacy format)',
-          ); // Debug log
         } else {
           places = [];
-          print('Unexpected API response format'); // Debug log
         }
 
         setState(() {
@@ -146,7 +139,6 @@ class _PlacesScreenState extends State<PlacesScreen> {
         });
       }
     } catch (e) {
-      print('Exception: $e'); // Debug log
       setState(() {
         _error = 'Connection error: ${e.toString()}';
       });
@@ -243,6 +235,12 @@ class _PlacesScreenState extends State<PlacesScreen> {
                   _radius = value;
                 });
               },
+              onChangeEnd: (value) {
+                // Real-time update when slider is released
+                if (_userPosition != null) {
+                  _fetchNearbyPlaces(_userPosition!.latitude, _userPosition!.longitude);
+                }
+              },
             ),
             const SizedBox(height: 8),
             Row(
@@ -275,23 +273,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              final location = Provider.of<LocationProvider>(
-                context,
-                listen: false,
-              ).currentPosition;
-              if (location != null) {
-                print(
-                  'Searching for REAL places within ${(_radius / 1000).toStringAsFixed(1)}km...',
-                );
-                _fetchNearbyPlaces(location.latitude, location.longitude);
-              }
-            },
-            child: const Text('Find Real Places'),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -306,6 +288,10 @@ class _PlacesScreenState extends State<PlacesScreen> {
         setState(() {
           _radius = radiusValue;
         });
+        // Real-time update when radius changes
+        if (_userPosition != null) {
+          _fetchNearbyPlaces(_userPosition!.latitude, _userPosition!.longitude);
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -867,23 +853,6 @@ class _PlacesScreenState extends State<PlacesScreen> {
                         'Current settings: ${(_radius / 1000).toStringAsFixed(1)}km radius, $_selectedCategory category',
                         style: TextStyle(color: Colors.grey[400], fontSize: 10),
                         textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: location != null
-                            ? () {
-                                setState(() {
-                                  _selectedCategory = 'all';
-                                  _radius = 10000;
-                                });
-                                _fetchNearbyPlaces(
-                                  location.latitude,
-                                  location.longitude,
-                                );
-                              }
-                            : null,
-                        icon: const Icon(Icons.search),
-                        label: const Text('Find Real Places (10km)'),
                       ),
                     ],
                   ),
