@@ -7,22 +7,58 @@ exports.getNearbyPlaces = async (req, res) => {
   try {
     console.log(`Fetching places from MongoDB: ${category} within ${radius}m of ${lat}, ${lon}`);
     
+    // Ensure geospatial index exists before querying
+    await ensureGeospatialIndex();
+    
     // First, try to get data from MongoDB Atlas
-    let places = await Place.find({
-      $and: [
-        {
-          location: {
-            $near: {
-              $geometry: { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] },
-              $maxDistance: parseInt(radius)
+    let places;
+    try {
+      places = await Place.find({
+        $and: [
+          {
+            location: {
+              $near: {
+                $geometry: { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] },
+                $maxDistance: parseInt(radius)
+              }
             }
-          }
-        },
+          },
+          category === 'all' ? {} : { category: category }
+        ]
+      })
+      .sort({ distance: 1 }) // Sort by distance
+      .limit(25); // Limit results
+    } catch (geoQueryError) {
+      console.log('Geospatial query failed, using fallback method:', geoQueryError.message);
+      
+      // Fallback: Use basic query without geospatial operations
+      places = await Place.find(
         category === 'all' ? {} : { category: category }
-      ]
-    })
-    .sort({ distance: 1 }) // Sort by distance
-    .limit(25); // Limit results
+      )
+      .limit(50); // Get more for manual filtering
+      
+      // Manual distance filtering
+      places = places.filter(place => {
+        if (!place.location || !place.location.coordinates) return false;
+        const distance = calculateDistance(
+          parseFloat(lat), parseFloat(lon),
+          place.location.coordinates[1], place.location.coordinates[0]
+        );
+        return distance <= parseInt(radius);
+      })
+      .sort((a, b) => {
+        const distA = calculateDistance(
+          parseFloat(lat), parseFloat(lon),
+          a.location.coordinates[1], a.location.coordinates[0]
+        );
+        const distB = calculateDistance(
+          parseFloat(lat), parseFloat(lon),
+          b.location.coordinates[1], b.location.coordinates[0]
+        );
+        return distA - distB;
+      })
+      .slice(0, 25);
+    }
 
     console.log(`Found ${places.length} places in MongoDB Atlas`);
 
@@ -146,4 +182,24 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
             Math.sin(Δλ/2) * Math.sin(Δλ/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
+}
+
+// Ensure geospatial index exists for MongoDB queries
+async function ensureGeospatialIndex() {
+  try {
+    // Check if the index already exists
+    const indexes = await Place.collection.getIndexes();
+    const hasGeoIndex = Object.keys(indexes).some(indexName => 
+      indexes[indexName].some(field => field[0] === 'location' && field[1] === '2dsphere')
+    );
+
+    if (!hasGeoIndex) {
+      console.log('Creating geospatial index for location field...');
+      await Place.collection.createIndex({ location: '2dsphere' });
+      console.log('✅ Geospatial index created successfully');
+    }
+  } catch (error) {
+    console.error('Failed to create geospatial index:', error.message);
+    // Continue without index - queries will be slower but still work with alternative approach
+  }
 }
