@@ -86,10 +86,14 @@ class _PlacesScreenState extends State<PlacesScreen> {
         url += '&category=$_selectedCategory';
       }
 
+      print('Fetching places from: $url'); // Debug log
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
         final places = json.decode(response.body);
+        print('Received ${places.length} places'); // Debug log
+        print('Places data: $places'); // Debug log
+
         setState(() {
           _places = places;
           _error = '';
@@ -98,12 +102,16 @@ class _PlacesScreenState extends State<PlacesScreen> {
         // Store places data to MongoDB
         _storePlacesData(places, lat, lon);
       } else {
+        print(
+          'API Error: ${response.statusCode} - ${response.body}',
+        ); // Debug log
         setState(() {
           _error =
               'Failed to load places: ${response.statusCode} - ${response.body}';
         });
       }
     } catch (e) {
+      print('Exception: $e'); // Debug log
       setState(() {
         _error = 'Connection error: ${e.toString()}';
       });
@@ -332,12 +340,30 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 children: [
                   Icon(Icons.location_on, size: 16, color: Colors.green[700]),
                   const SizedBox(width: 4),
-                  Text(
-                    '${_places.length} places within ${(_radius / 1000).toStringAsFixed(1)}km',
-                    style: TextStyle(
-                      color: Colors.green[700],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Text(
+                      '${_places.length} places within ${(_radius / 1000).toStringAsFixed(1)}km',
+                      style: TextStyle(
+                        color: Colors.green[700],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // Debug button to force refresh
+                  TextButton(
+                    onPressed: location != null
+                        ? () {
+                            print('Force refreshing places...');
+                            _fetchNearbyPlaces(
+                              location.latitude,
+                              location.longitude,
+                            );
+                          }
+                        : null,
+                    child: Text(
+                      'Refresh',
+                      style: TextStyle(color: Colors.green[700], fontSize: 10),
                     ),
                   ),
                 ],
@@ -399,6 +425,29 @@ class _PlacesScreenState extends State<PlacesScreen> {
                       'Try increasing the search radius or changing the category',
                       style: TextStyle(color: Colors.grey[500], fontSize: 12),
                       textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Current settings: ${(_radius / 1000).toStringAsFixed(1)}km radius, $_selectedCategory category',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: location != null
+                          ? () {
+                              setState(() {
+                                _selectedCategory = 'all';
+                                _radius = 5000; // Increase radius to 5km
+                              });
+                              _fetchNearbyPlaces(
+                                location.latitude,
+                                location.longitude,
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.search),
+                      label: const Text('Search with 5km radius'),
                     ),
                   ],
                 ),
