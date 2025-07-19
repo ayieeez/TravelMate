@@ -47,4 +47,21 @@ router.post('/weather-log', async (req, res) => {
   }
 });
 
+router.post('/places-log', async (req, res) => {
+  try {
+    const { MongoClient } = require('mongodb');
+    const client = new MongoClient(process.env.MONGODB_URI);
+    await client.connect();
+    const db = client.db();
+    const collection = db.collection('places_logs');
+    
+    await collection.insertOne(req.body);
+    
+    await client.close();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
