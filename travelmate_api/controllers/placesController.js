@@ -22,10 +22,10 @@ exports.getNearbyPlaces = async (req, res) => {
         searchTags = 'tourism=attraction|tourism=museum|tourism=gallery|tourism=viewpoint|historic=monument|tourism=zoo|tourism=theme_park|historic=castle|historic=archaeological_site';
         break;
       case 'restaurant':
-        searchTags = 'amenity=restaurant|amenity=cafe|amenity=fast_food|amenity=bar|amenity=pub|amenity=food_court|amenity=ice_cream';
+        searchTags = 'amenity=restaurant|amenity=cafe|amenity=fast_food|amenity=bar|amenity=pub|amenity=food_court|amenity=ice_cream|shop=bakery|shop=confectionery|shop=convenience|amenity=marketplace|shop=supermarket';
         break;
       case 'accommodation':
-        searchTags = 'tourism=hotel|tourism=guest_house|tourism=hostel|tourism=motel|tourism=resort|tourism=apartment';
+        searchTags = 'tourism=hotel|tourism=guest_house|tourism=hostel|tourism=motel|tourism=resort|tourism=apartment|tourism=chalet|tourism=camp_site|amenity=homestay';
         break;
       case 'shopping':
         searchTags = 'shop=mall|shop=supermarket|shop=convenience|shop=department_store|amenity=marketplace|shop=clothes|shop=electronics';
@@ -92,7 +92,7 @@ exports.getNearbyPlaces = async (req, res) => {
           // Determine place type with better logic
           let placeType = 'attraction';
           if (element.tags.amenity) {
-            if (['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'food_court', 'ice_cream'].includes(element.tags.amenity)) {
+            if (['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'food_court', 'ice_cream', 'marketplace'].includes(element.tags.amenity)) {
               placeType = 'restaurant';
             } else if (['cinema', 'theatre', 'nightclub'].includes(element.tags.amenity)) {
               placeType = 'entertainment';
@@ -104,15 +104,21 @@ exports.getNearbyPlaces = async (req, res) => {
               placeType = 'transport';
             } else if (['bank', 'atm', 'post_office'].includes(element.tags.amenity)) {
               placeType = 'services';
+            } else if (['homestay'].includes(element.tags.amenity)) {
+              placeType = 'accommodation';
             }
           } else if (element.tags.tourism) {
-            if (['hotel', 'guest_house', 'hostel', 'motel', 'resort', 'apartment'].includes(element.tags.tourism)) {
+            if (['hotel', 'guest_house', 'hostel', 'motel', 'resort', 'apartment', 'chalet', 'camp_site'].includes(element.tags.tourism)) {
               placeType = 'accommodation';
             } else {
               placeType = 'tourism';
             }
           } else if (element.tags.shop) {
-            placeType = 'shopping';
+            if (['bakery', 'confectionery', 'convenience', 'supermarket'].includes(element.tags.shop)) {
+              placeType = 'restaurant'; // Food-related shops count as restaurant category
+            } else {
+              placeType = 'shopping';
+            }
           } else if (element.tags.leisure) {
             if (['amusement_arcade', 'bowling_alley', 'sports_centre'].includes(element.tags.leisure)) {
               placeType = 'entertainment';
@@ -123,6 +129,9 @@ exports.getNearbyPlaces = async (req, res) => {
             placeType = 'tourism';
           } else if (element.tags.railway || element.tags.public_transport || element.tags.aeroway) {
             placeType = 'transport';
+          } else if (element.tags.cuisine) {
+            // If a place has cuisine tags, it's likely a restaurant
+            placeType = 'restaurant';
           }
 
           // Better address formatting
@@ -178,11 +187,16 @@ exports.getNearbyPlaces = async (req, res) => {
         .slice(0, 50); // Limit to 50 places
     }
 
-    // Fallback to Nominatim for more real places if Overpass returns insufficient results
-    // Different thresholds based on radius - smaller areas should have fewer minimum places
-    const minPlacesThreshold = radius < 1000 ? 5 : radius < 5000 ? 8 : 10;
+    // Always try Nominatim as fallback for specific categories like restaurant and accommodation
+    // Different thresholds based on radius and category
+    let minPlacesThreshold = radius < 1000 ? 3 : radius < 5000 ? 5 : 8;
     
-    if (places.length < minPlacesThreshold) {
+    // For specific categories, be more aggressive in searching
+    if (['restaurant', 'accommodation', 'shopping'].includes(category)) {
+      minPlacesThreshold = Math.max(1, minPlacesThreshold - 3);
+    }
+    
+    if (places.length < minPlacesThreshold || category === 'restaurant' || category === 'accommodation') {
       await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_INTERVAL));
       
       console.log(`Overpass returned ${places.length} places, trying Nominatim for more real places...`);
@@ -207,14 +221,14 @@ exports.getNearbyPlaces = async (req, res) => {
       // Category-specific searches for real places with better queries
       const categoryQueries = {
         'tourism': 'tourism=attraction,museum,gallery,viewpoint,zoo,theme_park&historic=monument,castle',
-        'restaurant': 'amenity=restaurant,cafe,fast_food,bar,pub,food_court',
-        'accommodation': 'tourism=hotel,guest_house,hostel,motel,resort',
-        'shopping': 'shop=mall,supermarket,department_store,clothes,electronics',
+        'restaurant': 'amenity=restaurant,cafe,fast_food,bar,pub,food_court&shop=bakery,confectionery,convenience&cuisine=*',
+        'accommodation': 'tourism=hotel,guest_house,hostel,motel,resort,apartment,chalet,camp_site',
+        'shopping': 'shop=mall,supermarket,department_store,clothes,electronics,convenience',
         'entertainment': 'amenity=cinema,theatre,nightclub&leisure=bowling_alley,amusement_arcade,sports_centre',
         'healthcare': 'amenity=hospital,clinic,pharmacy,dentist',
         'education': 'amenity=school,university,college,library',
         'transport': 'amenity=fuel,bus_station&railway=station&public_transport=station',
-        'all': 'tourism=attraction,museum&amenity=restaurant,cafe,cinema,hospital,fuel&shop=mall'
+        'all': 'tourism=attraction,museum&amenity=restaurant,cafe,cinema,hospital,fuel&shop=mall,convenience'
       };
 
       const categoryQuery = categoryQueries[category] || categoryQueries['all'];
@@ -229,6 +243,37 @@ exports.getNearbyPlaces = async (req, res) => {
           }
         )
       );
+
+      // Additional specific searches for restaurant and accommodation
+      if (category === 'restaurant') {
+        // Search for general food-related terms
+        searches.push(
+          axios.get(
+            `https://nominatim.openstreetmap.org/search?format=json&q=restaurant+food+cafe+makan&lat=${lat}&lon=${lon}&addressdetails=1&limit=30&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
+            {
+              headers: {
+                'User-Agent': 'TravelMate App (com.travelmate.app)',
+                'Accept-Language': 'en-US,en;q=0.9'
+              }
+            }
+          )
+        );
+      }
+
+      if (category === 'accommodation') {
+        // Search for accommodation terms
+        searches.push(
+          axios.get(
+            `https://nominatim.openstreetmap.org/search?format=json&q=hotel+resort+homestay+penginapan&lat=${lat}&lon=${lon}&addressdetails=1&limit=30&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
+            {
+              headers: {
+                'User-Agent': 'TravelMate App (com.travelmate.app)',
+                'Accept-Language': 'en-US,en;q=0.9'
+              }
+            }
+          )
+        );
+      }
 
       try {
         const responses = await Promise.all(searches);
@@ -295,8 +340,18 @@ exports.getNearbyPlaces = async (req, res) => {
       const distanceA = parseFloat(a.distance);
       const distanceB = parseFloat(b.distance);
       
-      // Type priority (tourism > restaurant > shopping > others)
-      const typePriority = { 'tourism': 1, 'restaurant': 2, 'shopping': 3, 'entertainment': 4 };
+      // Dynamic type priority based on search category
+      let typePriority = { 'tourism': 1, 'restaurant': 2, 'accommodation': 3, 'shopping': 4, 'entertainment': 5 };
+      
+      // If searching for specific category, prioritize that type
+      if (category === 'restaurant') {
+        typePriority = { 'restaurant': 1, 'tourism': 2, 'shopping': 3, 'accommodation': 4, 'entertainment': 5 };
+      } else if (category === 'accommodation') {
+        typePriority = { 'accommodation': 1, 'tourism': 2, 'restaurant': 3, 'shopping': 4, 'entertainment': 5 };
+      } else if (category === 'shopping') {
+        typePriority = { 'shopping': 1, 'restaurant': 2, 'tourism': 3, 'accommodation': 4, 'entertainment': 5 };
+      }
+      
       const priorityA = typePriority[a.type] || 9;
       const priorityB = typePriority[b.type] || 9;
       
@@ -329,8 +384,13 @@ exports.getNearbyPlaces = async (req, res) => {
       console.log('No real places found in the specified area');
       res.json({
         places: [],
-        message: `No ${category === 'all' ? 'places' : category} found within ${radius}m. Try increasing the search radius.`,
-        suggestions: ['Increase search radius', 'Try different category', 'Check your location']
+        message: `No ${category === 'all' ? 'places' : category} found within ${radius}m. Try increasing the search radius up to 50km.`,
+        suggestions: [
+          'Increase search radius to 10-50km', 
+          'Try different category', 
+          'You may be in a rural area with limited mapped establishments',
+          'Move closer to urban areas for more results'
+        ]
       });
     } else {
       // Return optimized results with metadata
