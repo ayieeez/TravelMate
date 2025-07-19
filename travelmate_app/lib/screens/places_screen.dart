@@ -20,7 +20,8 @@ class _PlacesScreenState extends State<PlacesScreen> {
   bool _isLoading = true;
   String _error = '';
   String _selectedCategory = 'all';
-  double _radius = 1000; // Default radius in meters
+  double _radius =
+      2000; // Default radius in meters (2km for better real results)
   Position? _userPosition;
 
   final List<Map<String, dynamic>> _categories = [
@@ -182,22 +183,58 @@ class _PlacesScreenState extends State<PlacesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Search Filters'),
+        title: const Text('Search Filters - Real Places Only'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Search Radius: ${(_radius / 1000).toStringAsFixed(1)} km'),
+            Text(
+              'Search Radius: ${(_radius / 1000).toStringAsFixed(1)} km',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Find real attractions, restaurants, and places within your selected area',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
             Slider(
               value: _radius,
-              min: 500,
-              max: 10000,
-              divisions: 19,
+              min: 500, // 0.5km minimum
+              max: 50000, // 50km maximum as requested
+              divisions: 99, // 0.5km increments
               label: '${(_radius / 1000).toStringAsFixed(1)} km',
               onChanged: (value) {
                 setState(() {
                   _radius = value;
                 });
               },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '0.5km',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                Text(
+                  '50km',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Quick selection buttons
+            Wrap(
+              spacing: 8,
+              children: [
+                _buildQuickRadiusButton('1km', 1000),
+                _buildQuickRadiusButton('5km', 5000),
+                _buildQuickRadiusButton('10km', 10000),
+                _buildQuickRadiusButton('25km', 25000),
+                _buildQuickRadiusButton('50km', 50000),
+              ],
             ),
           ],
         ),
@@ -214,12 +251,45 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 listen: false,
               ).currentPosition;
               if (location != null) {
+                print(
+                  'Searching for REAL places within ${(_radius / 1000).toStringAsFixed(1)}km...',
+                );
                 _fetchNearbyPlaces(location.latitude, location.longitude);
               }
             },
-            child: const Text('Apply'),
+            child: const Text('Find Real Places'),
           ),
         ],
+      ),
+    );
+  }
+
+  // Helper method for quick radius selection buttons
+  Widget _buildQuickRadiusButton(String label, double radiusValue) {
+    final isSelected = _radius == radiusValue;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _radius = radiusValue;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue[600] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? Colors.blue[600]! : Colors.grey[400]!,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey[700],
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }
@@ -438,8 +508,12 @@ class _PlacesScreenState extends State<PlacesScreen> {
                           ? () {
                               setState(() {
                                 _selectedCategory = 'all';
-                                _radius = 5000; // Increase radius to 5km
+                                _radius =
+                                    10000; // Increase radius to 10km for real places
                               });
+                              print(
+                                'Expanding search to 10km for real places...',
+                              );
                               _fetchNearbyPlaces(
                                 location.latitude,
                                 location.longitude,
@@ -447,7 +521,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                             }
                           : null,
                       icon: const Icon(Icons.search),
-                      label: const Text('Search with 5km radius'),
+                      label: const Text('Find Real Places (10km)'),
                     ),
                   ],
                 ),
