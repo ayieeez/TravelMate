@@ -2,7 +2,8 @@ const axios = require('axios');
 const Place = require('../models/Place');
 
 let lastRequestTime = 0;
-const RATE_LIMIT_INTERVAL = 1000;
+const RATE_LIMIT_INTERVAL = 1200; // Increased to reduce memory pressure
+const MAX_PLACES_LIMIT = 25; // Reduced from 50 to save memory
 
 exports.getNearbyPlaces = async (req, res) => {
   const { lat, lon, radius = 1000, category = 'all' } = req.query;
@@ -184,7 +185,7 @@ exports.getNearbyPlaces = async (req, res) => {
           }
           return distanceA - distanceB;
         })
-        .slice(0, 50); // Limit to 50 places
+        .slice(0, MAX_PLACES_LIMIT); // Reduced limit to save memory
     }
 
     // Always try Nominatim as fallback for specific categories like restaurant and accommodation
@@ -204,75 +205,43 @@ exports.getNearbyPlaces = async (req, res) => {
       // Multiple Nominatim searches for comprehensive results
       const searches = [];
       
-      // Search by category with larger area
-      const viewboxSize = Math.min(radius / 111320, 0.5); // Convert to degrees, max 0.5 degrees
+      // Search by category with larger area - REDUCED queries to save memory
+      const viewboxSize = Math.min(radius / 111320, 0.3); // Reduced from 0.5 to 0.3
       searches.push(
         axios.get(
-          `https://nominatim.openstreetmap.org/search?format=json&lat=${lat}&lon=${lon}&addressdetails=1&extratags=1&limit=50&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
+          `https://nominatim.openstreetmap.org/search?format=json&lat=${lat}&lon=${lon}&addressdetails=1&extratags=1&limit=20&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
           {
             headers: {
               'User-Agent': 'TravelMate App (com.travelmate.app)',
               'Accept-Language': 'en-US,en;q=0.9'
-            }
+            },
+            timeout: 15000 // Reduced timeout
           }
         )
       );
 
-      // Category-specific searches for real places with better queries
-      const categoryQueries = {
-        'tourism': 'tourism=attraction,museum,gallery,viewpoint,zoo,theme_park&historic=monument,castle',
-        'restaurant': 'amenity=restaurant,cafe,fast_food,bar,pub,food_court&shop=bakery,confectionery,convenience&cuisine=*',
-        'accommodation': 'tourism=hotel,guest_house,hostel,motel,resort,apartment,chalet,camp_site',
-        'shopping': 'shop=mall,supermarket,department_store,clothes,electronics,convenience',
-        'entertainment': 'amenity=cinema,theatre,nightclub&leisure=bowling_alley,amusement_arcade,sports_centre',
-        'healthcare': 'amenity=hospital,clinic,pharmacy,dentist',
-        'education': 'amenity=school,university,college,library',
-        'transport': 'amenity=fuel,bus_station&railway=station&public_transport=station',
-        'all': 'tourism=attraction,museum&amenity=restaurant,cafe,cinema,hospital,fuel&shop=mall,convenience'
-      };
+      // Only do category-specific search for restaurant and accommodation
+      if (['restaurant', 'accommodation'].includes(category)) {
+        const categoryQueries = {
+          'restaurant': 'amenity=restaurant,cafe,fast_food',
+          'accommodation': 'tourism=hotel,guest_house,hostel'
+        };
 
-      const categoryQuery = categoryQueries[category] || categoryQueries['all'];
-      searches.push(
-        axios.get(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${categoryQuery}&lat=${lat}&lon=${lon}&addressdetails=1&limit=30&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
-          {
-            headers: {
-              'User-Agent': 'TravelMate App (com.travelmate.app)',
-              'Accept-Language': 'en-US,en;q=0.9'
-            }
-          }
-        )
-      );
-
-      // Additional specific searches for restaurant and accommodation
-      if (category === 'restaurant') {
-        // Search for general food-related terms
-        searches.push(
-          axios.get(
-            `https://nominatim.openstreetmap.org/search?format=json&q=restaurant+food+cafe+makan&lat=${lat}&lon=${lon}&addressdetails=1&limit=30&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
-            {
-              headers: {
-                'User-Agent': 'TravelMate App (com.travelmate.app)',
-                'Accept-Language': 'en-US,en;q=0.9'
+        const categoryQuery = categoryQueries[category];
+        if (categoryQuery) {
+          searches.push(
+            axios.get(
+              `https://nominatim.openstreetmap.org/search?format=json&q=${categoryQuery}&lat=${lat}&lon=${lon}&addressdetails=1&limit=15&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
+              {
+                headers: {
+                  'User-Agent': 'TravelMate App (com.travelmate.app)',
+                  'Accept-Language': 'en-US,en;q=0.9'
+                },
+                timeout: 15000
               }
-            }
-          )
-        );
-      }
-
-      if (category === 'accommodation') {
-        // Search for accommodation terms
-        searches.push(
-          axios.get(
-            `https://nominatim.openstreetmap.org/search?format=json&q=hotel+resort+homestay+penginapan&lat=${lat}&lon=${lon}&addressdetails=1&limit=30&bounded=1&viewbox=${parseFloat(lon)-viewboxSize},${parseFloat(lat)-viewboxSize},${parseFloat(lon)+viewboxSize},${parseFloat(lat)+viewboxSize}`,
-            {
-              headers: {
-                'User-Agent': 'TravelMate App (com.travelmate.app)',
-                'Accept-Language': 'en-US,en;q=0.9'
-              }
-            }
-          )
-        );
+            )
+          );
+        }
       }
 
       try {
@@ -394,7 +363,7 @@ exports.getNearbyPlaces = async (req, res) => {
       });
     } else {
       // Return optimized results with metadata
-      const results = uniquePlaces.slice(0, 50); // Limit to 50 most relevant places
+      const results = uniquePlaces.slice(0, MAX_PLACES_LIMIT); // Use constant for consistency
       res.json({
         places: results,
         total: results.length,
