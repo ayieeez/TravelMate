@@ -91,9 +91,22 @@ class _PlacesScreenState extends State<PlacesScreen> {
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
-        final places = json.decode(response.body);
-        print('Received ${places.length} places'); // Debug log
-        print('Places data: $places'); // Debug log
+        final responseData = json.decode(response.body);
+        
+        // Handle the new API response format with metadata
+        List<dynamic> places;
+        if (responseData is Map && responseData.containsKey('places')) {
+          places = responseData['places'] as List<dynamic>;
+          print('Received ${places.length} places from API'); // Debug log
+          print('API metadata: total=${responseData['total']}, category=${responseData['category']}, radius=${responseData['radius']}'); // Debug log
+        } else if (responseData is List) {
+          // Fallback for old format
+          places = responseData;
+          print('Received ${places.length} places (legacy format)'); // Debug log
+        } else {
+          places = [];
+          print('Unexpected API response format'); // Debug log
+        }
 
         setState(() {
           _places = places;
@@ -103,12 +116,22 @@ class _PlacesScreenState extends State<PlacesScreen> {
         // Store places data to MongoDB
         _storePlacesData(places, lat, lon);
       } else {
-        print(
-          'API Error: ${response.statusCode} - ${response.body}',
-        ); // Debug log
+        final errorData = json.decode(response.body);
+        String errorMessage = 'Failed to load places: ${response.statusCode}';
+        
+        if (errorData is Map) {
+          if (errorData.containsKey('message')) {
+            errorMessage = errorData['message'];
+          }
+          if (errorData.containsKey('suggestions') && errorData['suggestions'] is List) {
+            final suggestions = (errorData['suggestions'] as List).join(', ');
+            errorMessage += '\nSuggestions: $suggestions';
+          }
+        }
+        
+        print('API Error: ${response.statusCode} - ${response.body}'); // Debug log
         setState(() {
-          _error =
-              'Failed to load places: ${response.statusCode} - ${response.body}';
+          _error = errorMessage;
         });
       }
     } catch (e) {
