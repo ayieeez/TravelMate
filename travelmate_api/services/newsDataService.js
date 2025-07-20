@@ -47,21 +47,27 @@ class NewsDataService {
     console.log('🚀 Initializing News Data Service...');
     
     try {
-      // Check if we have recent news data
-      const recentNews = await News.countDocuments({
-        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      // Clear any demo/test data and fetch fresh real news
+      console.log('🧹 Clearing existing demo/test data...');
+      const deletedCount = await News.deleteMany({
+        $or: [
+          { 'article.url': { $regex: 'example.com' } }, // Demo URLs
+          { 'article.source.name': { $regex: 'Malaysia Digital Economy Corporation|Penang Tourism Board|Johor Investment Corporation' } }, // Demo sources
+          { 'article.title': { $regex: 'Digital Economy Initiative|Heritage Sites Receive UNESCO|Economic Zone Development' } } // Demo titles
+        ]
       });
       
-      if (recentNews === 0) {
-        console.log('📰 No recent news found, fetching fresh data...');
-        await this.collectAndStoreAllNews();
-      } else {
-        console.log(`📰 Found ${recentNews} recent news articles in database`);
+      if (deletedCount.deletedCount > 0) {
+        console.log(`�️ Removed ${deletedCount.deletedCount} demo articles`);
       }
+      
+      // Always fetch fresh real news on startup
+      console.log('📰 Fetching fresh real Malaysian news...');
+      await this.collectAndStoreAllNews();
       
       this.isInitialized = true;
       this.setupAutoRefresh();
-      console.log('✅ News Data Service initialized successfully');
+      console.log('✅ News Data Service initialized with real news data');
       
     } catch (error) {
       console.error('❌ Failed to initialize News Data Service:', error.message);
@@ -166,25 +172,31 @@ class NewsDataService {
         q: query,
         language: 'en',
         sortBy: 'publishedAt',
-        pageSize: 50,
-        from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Last 7 days
+        pageSize: 100, // Increased to get more articles
+        from: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Last 3 days for fresher news
       };
 
+      console.log(`🔍 Fetching news for query: "${query}"`);
+      
       const response = await axios.get(url, {
         params: params,
         headers: { 'X-API-Key': apiKey },
-        timeout: 10000
+        timeout: 15000
       });
 
       if (response.data && response.data.articles) {
-        return response.data.articles.filter(article => 
+        const filteredArticles = response.data.articles.filter(article => 
           article.title && 
           article.title !== '[Removed]' &&
           article.description && 
           article.description !== '[Removed]' &&
           article.url &&
+          !article.url.includes('example.com') && // Exclude demo URLs
           this.isRelevantToMalaysia(article)
         );
+        
+        console.log(`📰 Found ${filteredArticles.length} relevant articles for "${query}"`);
+        return filteredArticles;
       }
 
       return [];
