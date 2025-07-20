@@ -15,7 +15,7 @@ services:
       - key: OPENWEATHER_API_KEY
         value: dc282357cf98721b16440ed5964f1376
       - key: NEWS_API_KEY
-        value: 7c9c4c4e8a8b4e5f9e3a8b2c1d4e5f6a
+        value: c705101b7841493e8a4273bd83bc20b0
     healthCheckPath: /api/news/stats
     scaling:
       minInstances: 1

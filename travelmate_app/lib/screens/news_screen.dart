@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'package:travelmate_app/providers/location_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:travelmate_app/services/mongodb_service.dart';
 import 'package:travelmate_app/config/env.dart';
 
 class NewsScreen extends StatefulWidget {
@@ -52,56 +51,26 @@ class _NewsScreenState extends State<NewsScreen> {
         lon = 101.6869;
       }
 
-      http.Response response;
+      // Use production API only for location-based Malaysian news
+      final response = await http
+          .get(
+            Uri.parse('${Env.baseUrl}/news?lat=$lat&lon=$lon&limit=50'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 20));
 
-      // Try production API first for better reliability
-      try {
-        response = await http
-            .get(
-              Uri.parse('${Env.baseUrl}/news?lat=$lat&lon=$lon&limit=50'),
-              headers: {'Content-Type': 'application/json'},
-            )
-            .timeout(const Duration(seconds: 15));
-
-        if (response.statusCode != 200) {
-          throw Exception('Production API returned ${response.statusCode}');
-        }
-
-        print('✅ News loaded from production in-house API');
-      } catch (e) {
-        // If production fails, try localhost for development
-        try {
-          response = await http
-              .get(
-                Uri.parse(
-                  'http://localhost:5000/api/news?lat=$lat&lon=$lon&limit=50',
-                ),
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Access-Control-Allow-Origin': '*',
-                },
-              )
-              .timeout(const Duration(seconds: 10));
-
-          if (response.statusCode != 200) {
-            throw Exception('Local API returned ${response.statusCode}');
-          }
-
-          print('✅ News loaded from local in-house API server');
-        } catch (localError) {
-          // Both APIs failed, provide helpful error message
-          throw Exception(
-            'Unable to connect to in-house news service. Please ensure the API server is running and check your internet connection.',
-          );
-        }
+      if (response.statusCode != 200) {
+        throw Exception('Failed to fetch Malaysian news: ${response.statusCode}');
       }
+
+      print('✅ Malaysian location-based news loaded from production API');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
         // Check if the response indicates success
         if (data['success'] == false) {
-          throw Exception(data['message'] ?? 'News service returned an error');
+          throw Exception(data['message'] ?? 'Malaysian news service returned an error');
         }
 
         if (mounted) {
@@ -113,14 +82,11 @@ class _NewsScreenState extends State<NewsScreen> {
           });
         }
 
-        // Store news data in MongoDB
-        _storeNewsData(lat, lon, data);
-
         // Show refresh message if data is being updated
         if (data['refreshing'] == true && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('📰 Fresh news is being fetched in the background'),
+              content: Text('📰 Fresh Malaysian news is being fetched in the background'),
               duration: Duration(seconds: 3),
             ),
           );
@@ -128,11 +94,12 @@ class _NewsScreenState extends State<NewsScreen> {
 
         // Show data source information
         final dataSource = data['dataSource'] ?? 'unknown';
-        print('📊 News data source: $dataSource');
+        print('📊 Malaysian news data source: $dataSource');
+        print('✅ Successfully loaded ${_newsArticles.length} articles from ${data['city']}, ${data['state']}');
       } else {
         if (mounted) {
           setState(() {
-            _error = 'Failed to fetch news: ${response.statusCode}';
+            _error = 'Failed to fetch Malaysian news: ${response.statusCode}';
             _isLoading = false;
           });
         }
@@ -140,35 +107,10 @@ class _NewsScreenState extends State<NewsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Error: $e';
+          _error = 'Unable to fetch Malaysian news: $e';
           _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<void> _storeNewsData(
-    double lat,
-    double lon,
-    Map<String, dynamic> data,
-  ) async {
-    try {
-      await MongoDBService.storeNewsData({
-        'lat': lat,
-        'lon': lon,
-        'location': _currentLocation,
-        'country': data['country'],
-        'city': data['city'],
-        'state': data['state'],
-        'isInMalaysia': data['isInMalaysia'],
-        'articles': _newsArticles,
-        'totalResults': data['totalResults'],
-        'cached': data['cached'] ?? false,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      // Silently fail if MongoDB service is not available
-      print('Failed to store news data: $e');
     }
   }
 
@@ -187,6 +129,212 @@ class _NewsScreenState extends State<NewsScreen> {
     Share.share('$title\n\n$url');
   }
 
+  void _showNewsPreview(Map<String, dynamic> article) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with close button
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[600],
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.article, color: Colors.white),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'News Preview',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Image
+                        if (article['urlToImage'] != null &&
+                            article['urlToImage'].isNotEmpty)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              article['urlToImage'],
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  size: 50,
+                                ),
+                              ),
+                            ),
+                          ),
+                        
+                        const SizedBox(height: 16),
+
+                        // Title
+                        Text(
+                          article['title'] ?? 'No title',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 12),
+
+                        // Source and date
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                article['source']?['name'] ?? 'Unknown Source',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (article['publishedAt'] != null)
+                              Text(
+                                _formatDate(article['publishedAt']),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+
+                        // Description
+                        if (article['description'] != null)
+                          Text(
+                            article['description'],
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black87,
+                              height: 1.5,
+                            ),
+                          ),
+                        
+                        if (article['content'] != null &&
+                            article['content'].isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: Text(
+                              article['content'],
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black54,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Action buttons
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _shareArticle(
+                              article['title'] ?? '',
+                              article['url'] ?? '',
+                            );
+                          },
+                          icon: const Icon(Icons.share),
+                          label: const Text('Share'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _launchURL(article['url'] ?? '');
+                          },
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Read More'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[600],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildNewsCard(Map<String, dynamic> article) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -194,7 +342,7 @@ class _NewsScreenState extends State<NewsScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _launchURL(article['url'] ?? ''),
+        onTap: () => _showNewsPreview(article),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -295,6 +443,29 @@ class _NewsScreenState extends State<NewsScreen> {
                         style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ),
+
+                  // Tap to preview hint
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.touch_app,
+                          size: 14,
+                          color: Colors.blue[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tap to preview',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -372,8 +543,8 @@ class _NewsScreenState extends State<NewsScreen> {
                           Expanded(
                             child: Text(
                               _locationInfo!['isInMalaysia'] == true
-                                  ? 'Location-specific news from in-house database'
-                                  : 'General Malaysian news from in-house database',
+                                  ? 'District-specific Malaysian news'
+                                  : 'General Malaysian news (outside Malaysia)',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.white70,
@@ -396,7 +567,7 @@ class _NewsScreenState extends State<NewsScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Source: ${_locationInfo!['dataSource']}',
+                            'Tap articles for preview • Powered by ${_locationInfo!['dataSource']}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white60,

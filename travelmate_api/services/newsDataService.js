@@ -45,8 +45,16 @@ class NewsDataService {
     if (this.isInitialized) return;
     
     console.log('🚀 Initializing News Data Service...');
+    console.log('🔑 NEWS_API_KEY available:', !!process.env.NEWS_API_KEY);
+    console.log('🗄️ MONGODB_URI available:', !!process.env.MONGODB_URI);
     
     try {
+      // Check if NEWS_API_KEY is available
+      if (!process.env.NEWS_API_KEY) {
+        console.error('❌ NEWS_API_KEY not found in environment variables');
+        this.isInitialized = true; // Mark as initialized to prevent infinite retries
+        return;
+      }
       // Clear any demo/test data and fetch fresh real news
       console.log('🧹 Clearing existing demo/test data...');
       const deletedCount = await News.deleteMany({

@@ -210,111 +210,254 @@ class _PlacesScreenState extends State<PlacesScreen> {
 
   // Show filter dialog for radius adjustment
   void _showFilterDialog() {
+    double tempRadius = _radius; // Temporary radius for preview
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Search Filters - Real Places Only'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Search Radius: ${(_radius / 1000).toStringAsFixed(1)} km',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.tune, color: Colors.blue[600]),
+              const SizedBox(width: 8),
+              const Text('Search Filters - Real Places Only'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Radius display with animated color change
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Text(
+                  'Search Radius: ${(tempRadius / 1000).toStringAsFixed(1)} km',
+                  style: TextStyle(
+                    fontSize: 16, 
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue[800],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Find real attractions, restaurants, and places within your selected area',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              // Enhanced slider with better styling
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: Colors.blue[600],
+                  inactiveTrackColor: Colors.blue[200],
+                  thumbColor: Colors.blue[700],
+                  overlayColor: Colors.blue[100],
+                  valueIndicatorColor: Colors.blue[700],
+                  valueIndicatorTextStyle: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                child: Slider(
+                  value: tempRadius,
+                  min: 500, // 0.5km minimum
+                  max: 50000, // 50km maximum
+                  divisions: 99, // 0.5km increments
+                  label: '${(tempRadius / 1000).toStringAsFixed(1)} km',
+                  onChanged: (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Min/Max labels
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '0.5km',
+                      style: TextStyle(
+                        color: Colors.grey[600], 
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '50km',
+                      style: TextStyle(
+                        color: Colors.grey[600], 
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Quick selection label
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Quick Select:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Enhanced quick selection buttons
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildQuickRadiusButton('1km', 1000, tempRadius, (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  }),
+                  _buildQuickRadiusButton('5km', 5000, tempRadius, (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  }),
+                  _buildQuickRadiusButton('10km', 10000, tempRadius, (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  }),
+                  _buildQuickRadiusButton('25km', 25000, tempRadius, (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  }),
+                  _buildQuickRadiusButton('50km', 50000, tempRadius, (value) {
+                    setDialogState(() {
+                      tempRadius = value;
+                    });
+                  }),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey[600],
+              ),
+              child: const Text('Close'),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Find real attractions, restaurants, and places within your selected area',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Slider(
-              value: _radius,
-              min: 500, // 0.5km minimum
-              max: 50000, // 50km maximum as requested
-              divisions: 99, // 0.5km increments
-              label: '${(_radius / 1000).toStringAsFixed(1)} km',
-              onChanged: (value) {
+            ElevatedButton.icon(
+              onPressed: () {
+                // Apply the selected radius
                 setState(() {
-                  _radius = value;
+                  _radius = tempRadius;
                 });
-              },
-              onChangeEnd: (value) {
-                // Real-time update when slider is released
+                // Fetch new places with updated radius
                 if (_userPosition != null) {
                   _fetchNearbyPlaces(
                     _userPosition!.latitude,
                     _userPosition!.longitude,
                   );
                 }
+                Navigator.pop(context);
+                
+                // Show feedback snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Search radius updated to ${(tempRadius / 1000).toStringAsFixed(1)}km',
+                    ),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: Colors.green[600],
+                  ),
+                );
               },
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '0.5km',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[600],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                Text(
-                  '50km',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Quick selection buttons
-            Wrap(
-              spacing: 8,
-              children: [
-                _buildQuickRadiusButton('1km', 1000),
-                _buildQuickRadiusButton('5km', 5000),
-                _buildQuickRadiusButton('10km', 10000),
-                _buildQuickRadiusButton('25km', 25000),
-                _buildQuickRadiusButton('50km', 50000),
-              ],
+              ),
+              icon: const Icon(Icons.search, size: 18),
+              label: const Text('Submit'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
 
   // Helper method for quick radius selection buttons
-  Widget _buildQuickRadiusButton(String label, double radiusValue) {
-    final isSelected = _radius == radiusValue;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _radius = radiusValue;
-        });
-        // Real-time update when radius changes
-        if (_userPosition != null) {
-          _fetchNearbyPlaces(_userPosition!.latitude, _userPosition!.longitude);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[600] : Colors.grey[200],
+  Widget _buildQuickRadiusButton(
+    String label, 
+    double radiusValue, 
+    double currentRadius, 
+    Function(double) onRadiusChanged
+  ) {
+    final isSelected = currentRadius == radiusValue;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            onRadiusChanged(radiusValue);
+          },
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? Colors.blue[600]! : Colors.grey[400]!,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[700],
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blue[600] : Colors.grey[100],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected ? Colors.blue[600]! : Colors.grey[300]!,
+                width: isSelected ? 2 : 1,
+              ),
+              boxShadow: isSelected ? [
+                BoxShadow(
+                  color: Colors.blue[200]!,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ] : null,
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[700],
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
           ),
         ),
       ),
