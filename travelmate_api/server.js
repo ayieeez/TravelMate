@@ -1,8 +1,12 @@
-// Set working directory to script location
-process.chdir(__dirname);
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
+console.log('Environment variables loaded:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI);
+console.log('NEWS_API_KEY:', process.env.NEWS_API_KEY ? 'Set' : 'Not set');
+console.log('OPENWEATHER_API_KEY:', process.env.OPENWEATHER_API_KEY ? 'Set' : 'Not set');
+
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const connectDB = require('./config/db');
 const apiRoutes = require('./routes/api');
 
@@ -10,7 +14,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true, // Allow all origins for development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
+}));
 app.use(express.json());
 
 // Database and Index Initialization
@@ -56,5 +65,13 @@ initializeApp();
 
 // Routes
 app.use('/api', apiRoutes);
+
+// Serve static files with absolute path
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Root route for testing
+app.get('/', (req, res) => {
+  res.send('<h1>Malaysian News API Server</h1><p>Visit <a href="/test-news.html">/test-news.html</a> to test the news API</p>');
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

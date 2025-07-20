@@ -121,4 +121,21 @@ class MongoDBService {
       return false;
     }
   }
+
+  static Future<void> storeNewsData(Map<String, dynamic> newsData) async {
+    try {
+      final url = Uri.parse('${Env.baseUrl}/news-log');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(newsData),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to store news data: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('MongoDB news storage error: $e');
+    }
+  }
 }

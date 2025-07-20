@@ -3,11 +3,17 @@ const router = express.Router();
 const { getWeather } = require('../controllers/weatherController');
 const { getNearbyPlaces, refreshPlacesData } = require('../controllers/placesController');
 const { getExchangeRate } = require('../controllers/currencyController');
+const { getNews, refreshMalaysianNews, getMalaysianNewsStats } = require('../controllers/newsController');
 
 // Existing routes
 router.get('/weather', getWeather);
 router.get('/places', getNearbyPlaces);
 router.get('/currency', getExchangeRate);
+
+// Malaysian news routes
+router.get('/news', getNews);
+router.post('/news/refresh', refreshMalaysianNews);
+router.get('/news/stats', getMalaysianNewsStats);
 
 // New routes for places data management
 router.post('/places/refresh', refreshPlacesData);
