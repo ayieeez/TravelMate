@@ -17,6 +17,87 @@ router.get('/news/stats', getMalaysianNewsStats);
 router.delete('/news/clean', cleanOldNews);
 router.get('/news/category', getNewsByCategory);
 
+// Debug endpoint for news service troubleshooting
+router.get('/news/debug', async (req, res) => {
+  try {
+    const newsDataService = require('../services/newsDataService');
+    
+    // Check environment variables
+    const hasNewsApiKey = !!process.env.NEWS_API_KEY;
+    const hasMongoUri = !!process.env.MONGODB_URI;
+    
+    // Check service status
+    const isInitialized = newsDataService.isInitialized;
+    
+    // Get basic stats
+    const stats = await newsDataService.getNewsStatistics();
+    
+    // Test news collection (just one query)
+    let testResult = null;
+    try {
+      if (hasNewsApiKey) {
+        const testArticles = await newsDataService.fetchNewsForQuery('Malaysia', process.env.NEWS_API_KEY);
+        testResult = {
+          articlesFound: testArticles.length,
+          sampleTitle: testArticles[0]?.title || 'No articles found'
+        };
+      }
+    } catch (testError) {
+      testResult = { error: testError.message };
+    }
+    
+    res.json({
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        hasNewsApiKey,
+        hasMongoUri,
+        newsApiKeyLength: process.env.NEWS_API_KEY ? process.env.NEWS_API_KEY.length : 0
+      },
+      service: {
+        isInitialized,
+        lastFetchTime: newsDataService.lastFetchTime
+      },
+      database: stats,
+      apiTest: testResult,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Debug endpoint failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Force news initialization endpoint
+router.post('/news/force-init', async (req, res) => {
+  try {
+    const newsDataService = require('../services/newsDataService');
+    
+    // Reset initialization status
+    newsDataService.isInitialized = false;
+    
+    // Force initialize
+    await newsDataService.initialize();
+    
+    // Get stats
+    const stats = await newsDataService.getNewsStatistics();
+    
+    res.json({
+      message: 'News service force-initialized',
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Force initialization failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // New routes for places data management
 router.post('/places/refresh', refreshPlacesData);
 
