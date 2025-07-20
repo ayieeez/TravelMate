@@ -37,8 +37,11 @@ class _NewsScreenState extends State<NewsScreen> {
         });
       }
 
-      final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-      
+      final locationProvider = Provider.of<LocationProvider>(
+        context,
+        listen: false,
+      );
+
       double lat, lon;
       if (locationProvider.currentPosition != null) {
         lat = locationProvider.currentPosition!.latitude;
@@ -50,42 +53,57 @@ class _NewsScreenState extends State<NewsScreen> {
       }
 
       http.Response response;
-      bool usingLocalhost = false;
-      
-      // For web apps, try localhost first as it's more likely to work
+
+      // Try production API first for better reliability
       try {
-        usingLocalhost = true;
-        response = await http.get(
-          Uri.parse('http://localhost:5000/api/news?lat=$lat&lon=$lon'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        ).timeout(const Duration(seconds: 8));
-        
+        response = await http
+            .get(
+              Uri.parse('${Env.baseUrl}/news?lat=$lat&lon=$lon&limit=50'),
+              headers: {'Content-Type': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 15));
+
         if (response.statusCode != 200) {
-          throw Exception('Local API returned ${response.statusCode}');
+          throw Exception('Production API returned ${response.statusCode}');
         }
+
+        print('✅ News loaded from production in-house API');
       } catch (e) {
-        // If localhost fails, try production API
+        // If production fails, try localhost for development
         try {
-          usingLocalhost = false;
-          response = await http.get(
-            Uri.parse('${Env.baseUrl}/news?lat=$lat&lon=$lon'),
-            headers: {'Content-Type': 'application/json'},
-          ).timeout(const Duration(seconds: 10));
-          
+          response = await http
+              .get(
+                Uri.parse(
+                  'http://localhost:5000/api/news?lat=$lat&lon=$lon&limit=50',
+                ),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              )
+              .timeout(const Duration(seconds: 10));
+
           if (response.statusCode != 200) {
-            throw Exception('Production API returned ${response.statusCode}');
+            throw Exception('Local API returned ${response.statusCode}');
           }
-        } catch (prodError) {
+
+          print('✅ News loaded from local in-house API server');
+        } catch (localError) {
           // Both APIs failed, provide helpful error message
-          throw Exception('Unable to connect to news service. This may be due to browser security restrictions when connecting to localhost. Try running the app on a mobile device or check if the API server is running.');
+          throw Exception(
+            'Unable to connect to in-house news service. Please ensure the API server is running and check your internet connection.',
+          );
         }
       }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+
+        // Check if the response indicates success
+        if (data['success'] == false) {
+          throw Exception(data['message'] ?? 'News service returned an error');
+        }
+
         if (mounted) {
           setState(() {
             _newsArticles = data['articles'] ?? [];
@@ -97,13 +115,20 @@ class _NewsScreenState extends State<NewsScreen> {
 
         // Store news data in MongoDB
         _storeNewsData(lat, lon, data);
-        
-        // Show which API was used
-        if (usingLocalhost) {
-          print('✅ News loaded from local API server');
-        } else {
-          print('✅ News loaded from production API');
+
+        // Show refresh message if data is being updated
+        if (data['refreshing'] == true && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('📰 Fresh news is being fetched in the background'),
+              duration: Duration(seconds: 3),
+            ),
+          );
         }
+
+        // Show data source information
+        final dataSource = data['dataSource'] ?? 'unknown';
+        print('📊 News data source: $dataSource');
       } else {
         if (mounted) {
           setState(() {
@@ -122,7 +147,11 @@ class _NewsScreenState extends State<NewsScreen> {
     }
   }
 
-  Future<void> _storeNewsData(double lat, double lon, Map<String, dynamic> data) async {
+  Future<void> _storeNewsData(
+    double lat,
+    double lon,
+    Map<String, dynamic> data,
+  ) async {
     try {
       await MongoDBService.storeNewsData({
         'lat': lat,
@@ -147,9 +176,9 @@ class _NewsScreenState extends State<NewsScreen> {
     final Uri uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $url')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
       }
     }
   }
@@ -170,9 +199,12 @@ class _NewsScreenState extends State<NewsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image
-            if (article['urlToImage'] != null && article['urlToImage'].isNotEmpty)
+            if (article['urlToImage'] != null &&
+                article['urlToImage'].isNotEmpty)
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 child: Image.network(
                   article['urlToImage'],
                   height: 180,
@@ -185,7 +217,7 @@ class _NewsScreenState extends State<NewsScreen> {
                   ),
                 ),
               ),
-            
+
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -203,7 +235,7 @@ class _NewsScreenState extends State<NewsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Description
                   if (article['description'] != null)
                     Text(
@@ -217,14 +249,17 @@ class _NewsScreenState extends State<NewsScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 12),
-                  
+
                   // Source and date row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // Source
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.blue[50],
                           borderRadius: BorderRadius.circular(8),
@@ -238,7 +273,7 @@ class _NewsScreenState extends State<NewsScreen> {
                           ),
                         ),
                       ),
-                      
+
                       // Share button
                       IconButton(
                         icon: const Icon(Icons.share, size: 20),
@@ -250,17 +285,14 @@ class _NewsScreenState extends State<NewsScreen> {
                       ),
                     ],
                   ),
-                  
+
                   // Published date
                   if (article['publishedAt'] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
                         _formatDate(article['publishedAt']),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ),
                 ],
@@ -277,7 +309,7 @@ class _NewsScreenState extends State<NewsScreen> {
       final date = DateTime.parse(dateStr);
       final now = DateTime.now();
       final difference = now.difference(date);
-      
+
       if (difference.inDays > 0) {
         return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
       } else if (difference.inHours > 0) {
@@ -322,10 +354,7 @@ class _NewsScreenState extends State<NewsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     '📍 $_currentLocation',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
+                    style: const TextStyle(fontSize: 16, color: Colors.white70),
                   ),
                   if (_locationInfo != null)
                     Padding(
@@ -333,20 +362,45 @@ class _NewsScreenState extends State<NewsScreen> {
                       child: Row(
                         children: [
                           Icon(
-                            _locationInfo!['isInMalaysia'] == true 
-                                ? Icons.location_on 
+                            _locationInfo!['isInMalaysia'] == true
+                                ? Icons.location_on
                                 : Icons.public,
                             color: Colors.white70,
                             size: 16,
                           ),
                           const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _locationInfo!['isInMalaysia'] == true
+                                  ? 'Location-specific news from in-house database'
+                                  : 'General Malaysian news from in-house database',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_locationInfo != null &&
+                      _locationInfo!['dataSource'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.storage,
+                            color: Colors.white70,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            _locationInfo!['isInMalaysia'] == true
-                                ? 'Location-specific news'
-                                : 'General Malaysian news',
+                            'Source: ${_locationInfo!['dataSource']}',
                             style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.white70,
+                              fontSize: 12,
+                              color: Colors.white60,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ],
@@ -355,7 +409,7 @@ class _NewsScreenState extends State<NewsScreen> {
                 ],
               ),
             ),
-            
+
             // Content
             Expanded(
               child: _isLoading
@@ -370,68 +424,64 @@ class _NewsScreenState extends State<NewsScreen> {
                       ),
                     )
                   : _error.isNotEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  size: 64,
-                                  color: Colors.red,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Oops! Something went wrong',
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _error,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: _fetchNews,
-                                  child: const Text('Try Again'),
-                                ),
-                              ],
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Oops! Something went wrong',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _fetchNews,
+                              child: const Text('Try Again'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _newsArticles.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.newspaper, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'No news available',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        )
-                      : _newsArticles.isEmpty
-                          ? const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.newspaper,
-                                    size: 64,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    'No news available',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Pull down to refresh',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _newsArticles.length,
-                              itemBuilder: (context, index) {
-                                return _buildNewsCard(_newsArticles[index]);
-                              },
-                            ),
+                          Text(
+                            'Pull down to refresh',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _newsArticles.length,
+                      itemBuilder: (context, index) {
+                        return _buildNewsCard(_newsArticles[index]);
+                      },
+                    ),
             ),
           ],
         ),

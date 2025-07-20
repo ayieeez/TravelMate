@@ -3,7 +3,7 @@ const router = express.Router();
 const { getWeather } = require('../controllers/weatherController');
 const { getNearbyPlaces, refreshPlacesData } = require('../controllers/placesController');
 const { getExchangeRate } = require('../controllers/currencyController');
-const { getNews, refreshMalaysianNews, getMalaysianNewsStats } = require('../controllers/newsController');
+const { getNews, refreshMalaysianNews, getMalaysianNewsStats, cleanOldNews, getNewsByCategory } = require('../controllers/newsController');
 
 // Existing routes
 router.get('/weather', getWeather);
@@ -14,6 +14,8 @@ router.get('/currency', getExchangeRate);
 router.get('/news', getNews);
 router.post('/news/refresh', refreshMalaysianNews);
 router.get('/news/stats', getMalaysianNewsStats);
+router.delete('/news/clean', cleanOldNews);
+router.get('/news/category', getNewsByCategory);
 
 // New routes for places data management
 router.post('/places/refresh', refreshPlacesData);

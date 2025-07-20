@@ -14,6 +14,11 @@ const newsSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  category: {
+    type: String,
+    default: 'general',
+    enum: ['general', 'economy', 'tourism', 'technology', 'politics', 'sports', 'culture', 'local']
+  },
   article: {
     title: {
       type: String,
