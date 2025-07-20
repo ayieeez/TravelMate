@@ -52,6 +52,27 @@ async function initializeApp() {
     } catch (indexError) {
       console.log('⚠️ Timestamp index already exists or failed to create');
     }
+
+    // Initialize News indexes
+    const News = require('./models/News');
+    try {
+      await News.collection.createIndex({ country: 1, city: 1, 'article.publishedAt': -1 });
+      console.log('✅ News location index ready');
+    } catch (indexError) {
+      console.log('⚠️ News location index already exists or failed to create');
+    }
+
+    try {
+      await News.collection.createIndex({ category: 1, 'article.publishedAt': -1 });
+      console.log('✅ News category index ready');
+    } catch (indexError) {
+      console.log('⚠️ News category index already exists or failed to create');
+    }
+
+    // Initialize News Data Service
+    console.log('🚀 Initializing News Data Service...');
+    const newsDataService = require('./services/newsDataService');
+    await newsDataService.initialize();
     
     console.log('🎉 Database initialization complete');
   } catch (error) {

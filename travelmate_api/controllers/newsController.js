@@ -1,28 +1,28 @@
-const axios = require('axios');
 const News = require('../models/News');
+const newsDataService = require('../services/newsDataService');
 
 // Malaysian states and major cities mapping for precise location matching
 const MALAYSIAN_LOCATIONS = {
-  'kuala lumpur': { state: 'Federal Territory', keywords: ['kuala lumpur', 'kl', 'klang valley'] },
-  'george town': { state: 'Penang', keywords: ['george town', 'penang', 'pulau pinang'] },
-  'johor bahru': { state: 'Johor', keywords: ['johor bahru', 'jb', 'johor'] },
-  'ipoh': { state: 'Perak', keywords: ['ipoh', 'perak'] },
-  'shah alam': { state: 'Selangor', keywords: ['shah alam', 'selangor'] },
-  'petaling jaya': { state: 'Selangor', keywords: ['petaling jaya', 'pj', 'selangor'] },
-  'kota kinabalu': { state: 'Sabah', keywords: ['kota kinabalu', 'kk', 'sabah'] },
-  'kuching': { state: 'Sarawak', keywords: ['kuching', 'sarawak'] },
-  'malacca': { state: 'Malacca', keywords: ['malacca', 'melaka'] },
-  'alor setar': { state: 'Kedah', keywords: ['alor setar', 'kedah'] },
-  'kota bharu': { state: 'Kelantan', keywords: ['kota bharu', 'kelantan'] },
-  'kuantan': { state: 'Pahang', keywords: ['kuantan', 'pahang'] },
-  'seremban': { state: 'Negeri Sembilan', keywords: ['seremban', 'negeri sembilan'] },
-  'kangar': { state: 'Perlis', keywords: ['kangar', 'perlis'] },
-  'kuala terengganu': { state: 'Terengganu', keywords: ['kuala terengganu', 'terengganu'] },
-  'putrajaya': { state: 'Federal Territory', keywords: ['putrajaya'] },
-  'labuan': { state: 'Federal Territory', keywords: ['labuan'] }
+  'kuala lumpur': { state: 'Federal Territory', coordinates: [3.139, 101.6869] },
+  'george town': { state: 'Penang', coordinates: [5.4141, 100.3288] },
+  'johor bahru': { state: 'Johor', coordinates: [1.4927, 103.7414] },
+  'ipoh': { state: 'Perak', coordinates: [4.5975, 101.0901] },
+  'shah alam': { state: 'Selangor', coordinates: [3.0733, 101.5185] },
+  'petaling jaya': { state: 'Selangor', coordinates: [3.1073, 101.6067] },
+  'kota kinabalu': { state: 'Sabah', coordinates: [5.9749, 116.0724] },
+  'kuching': { state: 'Sarawak', coordinates: [1.5533, 110.3593] },
+  'malacca': { state: 'Malacca', coordinates: [2.2449, 102.2482] },
+  'alor setar': { state: 'Kedah', coordinates: [6.1239, 100.3635] },
+  'kota bharu': { state: 'Kelantan', coordinates: [6.1264, 102.2380] },
+  'kuantan': { state: 'Pahang', coordinates: [3.8077, 103.3260] },
+  'seremban': { state: 'Negeri Sembilan', coordinates: [2.7258, 101.9424] },
+  'kangar': { state: 'Perlis', coordinates: [6.4414, 100.1986] },
+  'kuala terengganu': { state: 'Terengganu', coordinates: [5.3302, 103.1408] },
+  'putrajaya': { state: 'Federal Territory', coordinates: [2.9264, 101.6964] },
+  'labuan': { state: 'Federal Territory', coordinates: [5.2767, 115.2417] }
 };
 
-// Function to get Malaysian location from coordinates (simplified for testing)
+// Function to get Malaysian location from coordinates
 const getMalaysianLocation = async (lat, lon) => {
   // Define Malaysian coordinate bounds
   const MALAYSIA_BOUNDS = {
@@ -50,244 +50,37 @@ const getMalaysianLocation = async (lat, lon) => {
     };
   }
   
-  // Simple city detection based on coordinates
-  if (latNum >= 3.0 && latNum <= 3.3 && lonNum >= 101.5 && lonNum <= 101.8) {
-    return {
-      country: 'MY',
-      city: 'Kuala Lumpur',
-      state: 'Federal Territory',
-      isInMalaysia: true
-    };
-  } else if (latNum >= 5.2 && latNum <= 5.6 && lonNum >= 100.1 && lonNum <= 100.5) {
-    return {
-      country: 'MY',
-      city: 'George Town',
-      state: 'Penang',
-      isInMalaysia: true
-    };
-  } else if (latNum >= 1.4 && latNum <= 1.6 && lonNum >= 103.6 && lonNum <= 103.9) {
-    return {
-      country: 'MY',
-      city: 'Johor Bahru',
-      state: 'Johor',
-      isInMalaysia: true
-    };
+  // Find closest Malaysian city
+  let closestCity = 'Kuala Lumpur';
+  let closestState = 'Federal Territory';
+  let minDistance = Infinity;
+  
+  for (const [cityKey, locationData] of Object.entries(MALAYSIAN_LOCATIONS)) {
+    const [cityLat, cityLon] = locationData.coordinates;
+    const distance = Math.sqrt(
+      Math.pow(latNum - cityLat, 2) + Math.pow(lonNum - cityLon, 2)
+    );
+    
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestCity = cityKey.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ');
+      closestState = locationData.state;
+    }
   }
   
-  // Default to Kuala Lumpur for other Malaysian coordinates
   return {
     country: 'MY',
-    city: 'Kuala Lumpur',
-    state: 'Federal Territory',
+    city: closestCity,
+    state: closestState,
     isInMalaysia: true
   };
 };
 
-// Function to fetch Malaysian news from NewsAPI and store in database
-const fetchAndStoreMalaysianNews = async () => {
-  try {
-    const newsApiKey = process.env.NEWS_API_KEY;
-    if (!newsApiKey) {
-      console.error('NEWS_API_KEY not configured in environment variables');
-      throw new Error('NEWS_API_KEY not configured');
-    }
-
-    console.log('Fetching Malaysian news from NewsAPI...');
-    
-    // Fetch Malaysia-specific news
-    const malaysianNewsQueries = [
-      'Malaysia',
-      'Kuala Lumpur',
-      'Malaysian government',
-      'Malaysia economy',
-      'Malaysia tourism',
-      'Penang Malaysia',
-      'Johor Malaysia',
-      'Sabah Malaysia',
-      'Sarawak Malaysia'
-    ];
-
-    const allArticles = [];
-    
-    // Fetch news for each major Malaysian topic
-    for (const query of malaysianNewsQueries) {
-      try {
-        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=100&apiKey=${newsApiKey}`;
-        console.log(`Fetching news for: ${query}`);
-        
-        const response = await axios.get(url);
-        
-        if (response.data.articles) {
-          allArticles.push(...response.data.articles);
-        }
-        
-        // Add delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error(`Error fetching news for ${query}:`, error.message);
-      }
-    }
-
-    // Remove duplicates based on URL
-    const uniqueArticles = allArticles.filter((article, index, self) => 
-      index === self.findIndex(a => a.url === article.url)
-    );
-
-    console.log(`Fetched ${uniqueArticles.length} unique Malaysian articles`);
-
-    // Store articles in database with location categorization
-    for (const article of uniqueArticles) {
-      if (!article.title || article.title === '[Removed]' || 
-          !article.description || article.description === '[Removed]') {
-        continue;
-      }
-
-      // Determine which Malaysian cities/states this article relates to
-      const relatedLocations = [];
-      const articleText = `${article.title} ${article.description} ${article.content || ''}`.toLowerCase();
-      
-      for (const [locationKey, locationData] of Object.entries(MALAYSIAN_LOCATIONS)) {
-        if (locationData.keywords.some(keyword => articleText.includes(keyword))) {
-          relatedLocations.push({
-            city: locationKey.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-            state: locationData.state
-          });
-        }
-      }
-
-      // If no specific location found, make it available to all major cities
-      if (relatedLocations.length === 0) {
-        relatedLocations.push(
-          { city: 'Kuala Lumpur', state: 'Federal Territory' },
-          { city: 'George Town', state: 'Penang' },
-          { city: 'Johor Bahru', state: 'Johor' }
-        );
-      }
-
-      // Store for each related location
-      for (const location of relatedLocations) {
-        try {
-          const newsDocument = {
-            country: 'MY',
-            city: location.city,
-            state: location.state,
-            article: {
-              title: article.title,
-              description: article.description,
-              url: article.url,
-              urlToImage: article.urlToImage,
-              publishedAt: article.publishedAt,
-              source: {
-                name: article.source?.name || 'Unknown Source'
-              },
-              content: article.content
-            },
-            createdAt: new Date(),
-            lastUpdated: new Date()
-          };
-
-          // Upsert to avoid duplicates
-          await News.findOneAndUpdate(
-            { 
-              'article.url': article.url,
-              city: location.city
-            },
-            newsDocument,
-            { upsert: true, new: true }
-          );
-        } catch (dbError) {
-          console.error('Error saving article to database:', dbError.message);
-        }
-      }
-    }
-
-    console.log('Malaysian news stored in database successfully');
-    return uniqueArticles.length;
-  } catch (error) {
-    console.error('Error fetching Malaysian news:', error.message);
-    throw error;
-  }
-};
-
-// Function to get Malaysian news from database based on user location
-const getMalaysianNewsFromDB = async (city, state) => {
-  try {
-    console.log(`Fetching cached Malaysian news for ${city}, ${state}`);
-    
-    // Try to fetch from MongoDB first, fall back to in-memory cache
-    try {
-      const newsQuery = {
-        country: 'MY',
-        $or: [
-          { city: city },
-          { state: state },
-          { city: 'Kuala Lumpur' } // Fallback to national news
-        ]
-      };
-      
-      const cachedNews = await News.find(newsQuery)
-        .sort({ 'article.publishedAt': -1 })
-        .limit(50)
-        .exec();
-      
-      if (cachedNews && cachedNews.length > 0) {
-        const articles = cachedNews.map(news => news.article);
-        
-        // Remove duplicates based on URL
-        const uniqueArticles = articles.filter((article, index, self) => 
-          index === self.findIndex(a => a.url === article.url)
-        );
-        
-        console.log(`Found ${uniqueArticles.length} cached articles for ${city}`);
-        return uniqueArticles.slice(0, 20); // Return top 20 articles
-      }
-    } catch (dbError) {
-      console.log('Database not available, using fallback sample data');
-    }
-    
-    // Fallback sample Malaysian news for demonstration
-    const sampleMalaysianNews = [
-      {
-        title: "Malaysia Tourism Recovery Shows Strong Progress in 2025",
-        description: "Malaysia's tourism sector continues to show remarkable recovery with international visitor arrivals increasing significantly in the first quarter of 2025.",
-        url: "https://example.com/malaysia-tourism-recovery",
-        urlToImage: "https://example.com/tourism-image.jpg",
-        publishedAt: new Date().toISOString(),
-        source: { name: "Malaysia Tourism Board" },
-        content: "Malaysia's tourism industry has demonstrated resilience and strong recovery..."
-      },
-      {
-        title: `${city} Local Development Projects Accelerate Economic Growth`,
-        description: `New infrastructure and development projects in ${city}, ${state} are driving economic growth and improving quality of life for residents.`,
-        url: `https://example.com/${city.toLowerCase().replace(' ', '-')}-development`,
-        urlToImage: "https://example.com/development-image.jpg",
-        publishedAt: new Date(Date.now() - 3600000).toISOString(),
-        source: { name: `${state} Development Authority` },
-        content: `The ${state} state government has announced several key development projects...`
-      },
-      {
-        title: "Malaysia's Digital Economy Transformation Continues",
-        description: "Malaysia strengthens its position as a digital hub in Southeast Asia with new technology initiatives and investments.",
-        url: "https://example.com/malaysia-digital-economy",
-        urlToImage: "https://example.com/digital-image.jpg",
-        publishedAt: new Date(Date.now() - 7200000).toISOString(),
-        source: { name: "Malaysian Investment Development Authority" },
-        content: "Malaysia's digital transformation strategy is yielding positive results..."
-      }
-    ];
-    
-    console.log(`Returning ${sampleMalaysianNews.length} sample articles for ${city}`);
-    return sampleMalaysianNews;
-    
-  } catch (error) {
-    console.error('Error fetching news:', error.message);
-    return [];
-  }
-};
-
-// Main endpoint for getting Malaysian news
+// Main endpoint for getting Malaysian news (Database-first approach)
 exports.getNews = async (req, res) => {
-  const { lat, lon } = req.query;
+  const { lat, lon, category = 'all', limit = 50 } = req.query;
 
   if (!lat || !lon) {
     return res.status(400).json({ 
@@ -297,93 +90,91 @@ exports.getNews = async (req, res) => {
   }
 
   try {
-    console.log(`News request for coordinates: ${lat}, ${lon}`);
+    console.log(`📰 News request for coordinates: ${lat}, ${lon}`);
+    
+    // Ensure news service is initialized
+    if (!newsDataService.isInitialized) {
+      console.log('🚀 Initializing news service...');
+      await newsDataService.initialize();
+    }
     
     // Get Malaysian location from coordinates
     const locationInfo = await getMalaysianLocation(lat, lon);
+    console.log(`📍 Location determined: ${locationInfo.city}, ${locationInfo.state}`);
     
-    // If user is not in Malaysia, return Malaysia general news
-    if (!locationInfo.isInMalaysia) {
-      console.log('User outside Malaysia, returning general Malaysian news');
-      const generalMalaysianNews = await getMalaysianNewsFromDB('Kuala Lumpur', 'Federal Territory');
+    // Get news from database for this location
+    const articles = await newsDataService.getNewsForLocation(
+      locationInfo.city, 
+      locationInfo.state, 
+      parseInt(limit)
+    );
+    
+    if (articles.length > 0) {
+      console.log(`✅ Returning ${articles.length} articles for ${locationInfo.city}`);
       
       return res.json({
-        lat: parseFloat(lat),
-        lon: parseFloat(lon),
-        country: 'MY',
-        city: 'Malaysia (General)',
-        state: 'General',
-        isInMalaysia: false,
-        articles: generalMalaysianNews,
-        totalResults: generalMalaysianNews.length,
-        message: "Showing general Malaysian news (user location outside Malaysia)",
-        cached: true
-      });
-    }
-    
-    // Get location-specific Malaysian news from database
-    const cityNews = await getMalaysianNewsFromDB(locationInfo.city, locationInfo.state);
-    
-    if (cityNews.length > 0) {
-      console.log(`Returning ${cityNews.length} cached articles for ${locationInfo.city}`);
-      return res.json({
+        success: true,
         lat: parseFloat(lat),
         lon: parseFloat(lon),
         country: locationInfo.country,
         city: locationInfo.city,
         state: locationInfo.state,
-        isInMalaysia: true,
-        articles: cityNews,
-        totalResults: cityNews.length,
+        isInMalaysia: locationInfo.isInMalaysia,
+        articles: articles,
+        totalResults: articles.length,
         cached: true,
-        lastUpdated: new Date()
+        dataSource: 'in-house-database',
+        lastUpdated: new Date(),
+        message: locationInfo.isInMalaysia 
+          ? `Latest Malaysian news for ${locationInfo.city}` 
+          : 'General Malaysian news (location outside Malaysia)'
       });
     }
     
-    // If no cached news, trigger fresh fetch and return what we have
-    console.log('No cached news found, triggering fresh fetch...');
+    // If no articles found, trigger a refresh and return what we have
+    console.log('📰 No articles found, checking if refresh is needed...');
     
-    try {
+    const stats = await newsDataService.getNewsStatistics();
+    const shouldRefresh = !stats.lastFetchTime || 
+                         (Date.now() - stats.lastFetchTime.getTime()) > 30 * 60 * 1000; // 30 minutes
+    
+    if (shouldRefresh) {
+      console.log('🔄 Triggering background news refresh...');
       // Trigger background refresh without waiting
-      fetchAndStoreMalaysianNews().catch(error => {
-        console.error('Background news fetch failed:', error.message);
-      });
-      
-      // Return empty result with message to try again
-      return res.json({
-        lat: parseFloat(lat),
-        lon: parseFloat(lon),
-        country: locationInfo.country,
-        city: locationInfo.city,
-        state: locationInfo.state,
-        isInMalaysia: true,
-        articles: [],
-        totalResults: 0,
-        message: "Fresh Malaysian news is being fetched. Please try again in a few moments.",
-        refreshing: true
-      });
-    } catch (refreshError) {
-      console.error('Error triggering news refresh:', refreshError.message);
-      
-      return res.status(500).json({
-        error: "Unable to fetch Malaysian news",
-        lat: parseFloat(lat),
-        lon: parseFloat(lon),
-        country: locationInfo.country,
-        city: locationInfo.city,
-        state: locationInfo.state,
-        articles: [],
-        totalResults: 0
+      newsDataService.collectAndStoreAllNews().catch(error => {
+        console.error('❌ Background refresh failed:', error.message);
       });
     }
+    
+    // Return empty result with helpful message
+    return res.json({
+      success: true,
+      lat: parseFloat(lat),
+      lon: parseFloat(lon),
+      country: locationInfo.country,
+      city: locationInfo.city,
+      state: locationInfo.state,
+      isInMalaysia: locationInfo.isInMalaysia,
+      articles: [],
+      totalResults: 0,
+      cached: false,
+      dataSource: 'in-house-database',
+      message: shouldRefresh 
+        ? 'Fresh Malaysian news is being fetched. Please try again in a few moments.' 
+        : 'No recent news available for this location.',
+      refreshing: shouldRefresh,
+      statistics: stats
+    });
     
   } catch (error) {
-    console.error('News controller error:', error.message);
+    console.error('❌ News controller error:', error.message);
     return res.status(500).json({
+      success: false,
       error: "Internal server error",
       message: error.message,
       lat: parseFloat(lat),
-      lon: parseFloat(lon)
+      lon: parseFloat(lon),
+      dataSource: 'in-house-database'
     });
   }
 };
@@ -391,21 +182,31 @@ exports.getNews = async (req, res) => {
 // Endpoint to manually refresh Malaysian news
 exports.refreshMalaysianNews = async (req, res) => {
   try {
-    console.log('Manual Malaysian news refresh triggered');
-    const articleCount = await fetchAndStoreMalaysianNews();
+    console.log('🔄 Manual Malaysian news refresh triggered');
+    
+    // Ensure service is initialized
+    if (!newsDataService.isInitialized) {
+      await newsDataService.initialize();
+    }
+    
+    const result = await newsDataService.collectAndStoreAllNews();
     
     res.json({
       success: true,
-      message: `Successfully fetched and stored ${articleCount} Malaysian articles`,
-      articleCount: articleCount,
-      timestamp: new Date()
+      message: `Successfully fetched and stored Malaysian news`,
+      totalArticles: result.totalArticles,
+      storedArticles: result.storedArticles,
+      duration: result.duration,
+      timestamp: new Date(),
+      dataSource: 'in-house-database'
     });
   } catch (error) {
-    console.error('Manual refresh error:', error.message);
+    console.error('❌ Manual refresh error:', error.message);
     res.status(500).json({
       success: false,
       error: "Failed to refresh Malaysian news",
-      message: error.message
+      message: error.message,
+      dataSource: 'in-house-database'
     });
   }
 };
@@ -413,30 +214,94 @@ exports.refreshMalaysianNews = async (req, res) => {
 // Endpoint to get Malaysian news statistics
 exports.getMalaysianNewsStats = async (req, res) => {
   try {
-    const stats = await News.aggregate([
-      { $match: { country: 'MY' } },
-      {
-        $group: {
-          _id: { city: '$city', state: '$state' },
-          count: { $sum: 1 },
-          lastUpdated: { $max: '$lastUpdated' }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
-    
-    const totalArticles = await News.countDocuments({ country: 'MY' });
+    const stats = await newsDataService.getNewsStatistics();
     
     res.json({
-      totalMalaysianArticles: totalArticles,
-      locationBreakdown: stats,
+      success: true,
+      ...stats,
+      dataSource: 'in-house-database',
       timestamp: new Date()
     });
   } catch (error) {
-    console.error('Stats error:', error.message);
+    console.error('❌ Stats error:', error.message);
     res.status(500).json({
+      success: false,
       error: "Failed to get Malaysian news statistics",
-      message: error.message
+      message: error.message,
+      dataSource: 'in-house-database'
+    });
+  }
+};
+
+// Endpoint to clean old news
+exports.cleanOldNews = async (req, res) => {
+  try {
+    const deletedCount = await newsDataService.cleanOldNews();
+    
+    res.json({
+      success: true,
+      message: `Successfully cleaned ${deletedCount} old news articles`,
+      deletedCount: deletedCount,
+      timestamp: new Date(),
+      dataSource: 'in-house-database'
+    });
+  } catch (error) {
+    console.error('❌ Clean old news error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to clean old news",
+      message: error.message,
+      dataSource: 'in-house-database'
+    });
+  }
+};
+
+// Endpoint to get news by category
+exports.getNewsByCategory = async (req, res) => {
+  const { category, city, state, limit = 20 } = req.query;
+  
+  try {
+    const query = {
+      country: 'MY'
+    };
+    
+    if (category && category !== 'all') {
+      query.category = category;
+    }
+    
+    if (city) {
+      query.city = city;
+    }
+    
+    if (state) {
+      query.state = state;
+    }
+    
+    const news = await News.find(query)
+      .sort({ 'article.publishedAt': -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    const articles = news.map(item => item.article);
+    
+    res.json({
+      success: true,
+      category: category || 'all',
+      city: city || 'all',
+      state: state || 'all',
+      articles: articles,
+      totalResults: articles.length,
+      dataSource: 'in-house-database',
+      timestamp: new Date()
+    });
+    
+  } catch (error) {
+    console.error('❌ Category news error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to get news by category",
+      message: error.message,
+      dataSource: 'in-house-database'
     });
   }
 };
