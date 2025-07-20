@@ -123,11 +123,12 @@ exports.getNews = async (req, res) => {
         articles: articles,
         totalResults: articles.length,
         cached: true,
-        dataSource: 'in-house-database',
+        dataSource: 'real-malaysian-news',
+        newsType: 'live-newsapi-data',
         lastUpdated: new Date(),
         message: locationInfo.isInMalaysia 
-          ? `Latest Malaysian news for ${locationInfo.city}` 
-          : 'General Malaysian news (location outside Malaysia)'
+          ? `Real Malaysian news for ${locationInfo.city}` 
+          : 'Real Malaysian news (location outside Malaysia)'
       });
     }
     
